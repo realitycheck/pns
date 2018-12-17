@@ -14,11 +14,8 @@ services:
       - 5672:5672
       - 15672:15672
   app.redis:
-    user: ${DATA_USER}
     image: redis
-    volumes:
-      - ./data/redis/:/redis
-    command: --save /redis/dump.rdb
+    command: --save
     ports:
       - 6355:6379
   app.server:

@@ -25,7 +25,7 @@ DATE = $(shell date +'%FT%TZ%z')
 UID = $(shell id -u)
 
 .SHELLFLAGS = -c # Run commands in a -c flag
-.PHONY: build clean app metrics test all
+.PHONY: build clean app metrics test all git
 
 ${GO_APP_FILE}: vendor
 	go build -o ${GO_OUTPUT_FILE} -a \
@@ -49,6 +49,8 @@ app:
 	$(COMPOSE) -f ${COMPOSE_APP_FILE} up --build
 
 metrics:
+	mkdir -p data/grafana
+	mkdir -p data/prometheus
 	DATA_USER=$(UID) \
 	$(COMPOSE) -f ${COMPOSE_METRICS_FILE} up
 
@@ -60,3 +62,11 @@ test:
 	$(COMPOSE) -f ${COMPOSE_TEST_FILE} up --build
 
 all: app metrics test
+
+${GO_PROJECT}.tar.gz:
+	cd .. && tar -czf ${GO_PROJECT}.tar.gz ${GO_PROJECT} && mv ${GO_PROJECT}.tar.gz ${GO_PROJECT}
+
+git:
+	$(eval VERSION=$(shell echo ${VERSION} | awk -F. '{$$NF+=1;print}' OFS=.))	
+	git add .
+	git commit -m ${VERSION} && git tag ${VERSION}

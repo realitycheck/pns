@@ -1,16 +1,16 @@
 version: "3"
 services:
   metrics.prometheus:
-    user: ${DATA_USER}
+    user: ${DATA_USER:-1000}
     image: prom/prometheus
     volumes:
       - ./metrics/prometheus.yaml:/conf/prometheus.yaml:ro
-      - ./data/prometheus:/prometheus
+      - ../data/prometheus:/etc/prometheus
     network_mode: host
     command: --config.file=/conf/prometheus.yaml
   metrics.grafana:
-    user: ${DATA_USER}
+    user: ${DATA_USER:-1000}
     image: grafana/grafana
     volumes:
-      - ./data/grafana:/var/lib/grafana
+      - ../data/grafana:/var/lib/grafana
     network_mode: host
