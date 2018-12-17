@@ -36,8 +36,8 @@ func init() {
 	flag.BoolVar(&producerMode, "p", producerMode, "Producer Mode")
 	flag.StringVar(&producerExchange, "exchange", producerExchange, "Producer Exchange")
 	flag.StringVar(&producerRoutingKey, "routing-key", producerRoutingKey, "Producer Routing Key")
-	flag.IntVar(&producerRpsPublish, "rps-publish", producerRpsPublish, "Producer Publish RPS")
-	flag.IntVar(&producerMaxID, "max-id", producerMaxID, "Producer Max ID")
+	flag.IntVar(&producerRpsPublish, "rps", producerRpsPublish, "Producer Publish RPS")
+	flag.IntVar(&producerMaxID, "max", producerMaxID, "Producer Max ID")
 
 	flag.StringVar(&amqpURL, "amqp", amqpURL, "AMQP URL")
 }
@@ -127,6 +127,7 @@ func (p *producer) publish(exchange, routingKey string) error {
 	}
 
 	go func() {
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		rate := time.Tick(time.Second / time.Duration(p.rpsPublish))
 
 		for {
@@ -137,7 +138,7 @@ func (p *producer) publish(exchange, routingKey string) error {
 			default:
 				<-rate
 			}
-			p.users <- int(rand.Int31()) % p.maxID
+			p.users <- int(r.Int31()) % p.maxID
 		}
 	}()
 

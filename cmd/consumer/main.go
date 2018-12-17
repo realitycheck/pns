@@ -27,7 +27,8 @@ var (
 
 func init() {
 	flag.BoolVar(&consumerMode, "c", consumerMode, "Consumer Mode")
-	flag.IntVar(&consumerRpsConsume, "rps-consume", consumerRpsConsume, "Consumer Consume RPS")
+	flag.IntVar(&consumerRpsConsume, "rps", consumerRpsConsume, "Consumer Consume RPS")
+	flag.IntVar(&consumerMaxID, "max", consumerMaxID, "Consumer Max ID")
 
 	flag.StringVar(&httpURL, "http", httpURL, "HTTP URL")
 }
@@ -53,13 +54,14 @@ func main() {
 	users := make(chan int)
 
 	go func() {
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		rate := time.Tick(time.Second / time.Duration(consumerRpsConsume))
 		for {
 			select {
 			default:
 				<-rate
 			}
-			users <- int(rand.Int31()) % consumerMaxID
+			users <- int(r.Int31()) % consumerMaxID
 		}
 	}()
 

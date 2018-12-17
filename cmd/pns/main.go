@@ -49,9 +49,9 @@ var (
 	httpURL  = "http://external.http:8080"
 	amqpURL  = "amqp://guest:guest@external.amqp:5672"
 
-	handleHistogram = prom.NewHistogramVec(prom.HistogramOpts{
-		Name: "handler_duration_seconds",
-		Help: "A histogram of handler's duration in seconds",
+	metricsDurationSummary = prom.NewSummaryVec(prom.SummaryOpts{
+		Name: "app_duration_seconds",
+		Help: "A summary of handler's duration in seconds",
 	}, []string{
 		"handler",
 	})
@@ -77,7 +77,7 @@ func init() {
 	flag.BoolVar(&metricsMode, "m", metricsMode, "Metrics Mode")
 	flag.StringVar(&metricsAddr, "maddr", metricsAddr, "Metrics Addr")
 
-	prom.MustRegister(handleHistogram)
+	prom.MustRegister(metricsDurationSummary)
 }
 
 func checkErr(err error) error {
@@ -262,7 +262,7 @@ func (w *worker) listen(exchange, routingKey, queue string) error {
 
 func (w *worker) handleDelivery(d *amqp.Delivery) {
 	t := time.Now()
-	defer handleHistogram.WithLabelValues("handleDelivery").Observe(time.Since(t).Seconds())
+	defer metricsDurationSummary.WithLabelValues("handleDelivery").Observe(time.Since(t).Seconds())
 
 	redisConn := w.redisPool.Get()
 	defer redisConn.Close()
@@ -305,7 +305,7 @@ func promHistogram(handler string) func(http.HandlerFunc) http.HandlerFunc {
 	return func(h http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			t := time.Now()
-			defer handleHistogram.WithLabelValues(handler).Observe(time.Since(t).Seconds())
+			defer metricsDurationSummary.WithLabelValues(handler).Observe(time.Since(t).Seconds())
 			h(w, r)
 		}
 	}
@@ -391,7 +391,7 @@ func (s *server) handleRead(w http.ResponseWriter, r *http.Request) {
 	defer redisConn.Close()
 
 	incomingKey := fmt.Sprintf("incoming:%d", id)
-	_, err = redisConn.Do("SET", incomingKey, 0)
+	_, err = redisConn.Do("DEL", incomingKey)
 	checkErr(err)
 
 	defer resp.Body.Close()
