@@ -1,0 +1,67 @@
+version: "3"
+services:
+  external.http:
+    image: nginx
+    volumes:
+      - ./external/http.conf:/etc/nginx/conf.d/http.conf:ro
+      - ./external/http/:/etc/nginx/http/:ro
+    ports:
+      - 8080:8080
+      - 8081:8081
+  external.amqp:
+    image: rabbitmq:management
+    ports:
+      - 5672:5672
+      - 15672:15672
+  app.redis:
+    image: redis
+    ports:
+      - 6355:6379
+  app.server:
+    build:
+      context: ..
+      args:
+          - GO_PACKAGE
+    command: -s
+    ports:
+      - 9019:9019
+      - 9111:9111
+    links:
+      - app.redis
+      - external.http
+  app.worker:
+    build:
+      context: ..
+      args:
+          - GO_PACKAGE
+    command: -w
+    ports:
+      - 9112:9111
+    links:
+      - app.redis
+      - external.amqp
+  metrics.app.redis:
+    image: oliver006/redis_exporter
+    environment:
+      - REDIS_ADDR=redis://app.redis:6379
+    ports:
+        - 9121:9121
+    links:
+      - app.redis
+  metrics.external.http:
+    image: nginx/nginx-prometheus-exporter:0.1.0
+    command: -nginx.scrape-uri http://external.http:8081/stub_status
+    ports:
+      - 9113:9113
+    links:
+      - external.http
+  metrics.external.amqp:
+    image: kbudde/rabbitmq-exporter
+    environment:
+      - RABBIT_URL=http://external.amqp:15672
+      - RABBIT_CAPABILITIES=bert,no_sort
+      - PUBLISH_PORT=9419
+    ports:
+      - 9419:9419
+    links:
+      - external.amqp
