@@ -1,0 +1,14 @@
+version: "3"
+services:
+  test.consumer:
+    build:
+      context: ..
+      args:
+          - GO_PACKAGE
+          - GO_APP_FILE=${GO_APP_CONSUMER}
+  test.producer:
+    build:
+      context: ..
+      args:
+          - GO_PACKAGE
+          - GO_APP_FILE=${GO_APP_PRODUCER}

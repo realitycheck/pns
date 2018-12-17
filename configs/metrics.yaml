@@ -1,7 +1,7 @@
 version: "3"
 services:
   metrics.prometheus:
-    user: ${METRICS_DATA_USER}
+    user: ${METRICS_USER}
     image: prom/prometheus
     volumes:
       - ./metrics/prometheus.yaml:/conf/prometheus.yaml:ro
@@ -9,7 +9,7 @@ services:
     network_mode: host
     command: --config.file=/conf/prometheus.yaml
   metrics.grafana:
-    user: ${METRICS_DATA_USER}
+    user: ${METRICS_USER}
     image: grafana/grafana
     volumes:
       - ./metrics/data/grafana:/var/lib/grafana

@@ -22,6 +22,7 @@ services:
       context: ..
       args:
           - GO_PACKAGE
+          - GO_APP_FILE
     command: -s
     ports:
       - 9019:9019
@@ -34,6 +35,7 @@ services:
       context: ..
       args:
           - GO_PACKAGE
+          - GO_APP_FILE
     command: -w
     ports:
       - 9112:9111

@@ -1,2 +1,4 @@
 /vendor
-pns
+/pns
+/producer
+/consumer

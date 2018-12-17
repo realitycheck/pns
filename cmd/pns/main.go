@@ -23,6 +23,7 @@ import (
 )
 
 var (
+	name    string
 	version string
 	commit  string
 	date    string
@@ -81,7 +82,7 @@ func init() {
 
 func checkErr(err error) error {
 	if err != nil {
-		log.Printf("main: error, reason=%s", err)
+		log.Printf("%s: error, reason=%s", name, err)
 	}
 	return err
 }
@@ -120,8 +121,9 @@ func connectToAMQP(url string) *amqp.Connection {
 func main() {
 	flag.Parse()
 
-	log.Printf("main: version=%s, commit=%s, date=%s", version, commit, date)
-	log.Printf("main: starting...")
+	log.Printf("%s: version=%s, commit=%s, date=%s", name, version, commit, date)
+	log.Printf("%s: starting...", name)
+	defer log.Printf("%s: gg.", name)
 
 	runtime := &runtime{
 		wg:   &sync.WaitGroup{},
@@ -166,7 +168,7 @@ func main() {
 		go checkErr(http.ListenAndServe(metricsAddr, mux))
 	}
 
-	log.Printf("main: running...")
+	log.Printf("%s: running...", name)
 
 	exit := make(chan os.Signal, 1)
 	signal.Notify(exit, syscall.SIGINT, syscall.SIGTERM)
@@ -176,10 +178,8 @@ func main() {
 		close(runtime.done)
 	}
 
-	log.Printf("main: stopping...")
+	log.Printf("%s: stopping...", name)
 	runtime.wg.Wait()
-
-	log.Printf("main: gg.")
 }
 
 type runtime struct {
