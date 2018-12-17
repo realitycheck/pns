@@ -39,15 +39,15 @@ var (
 
 	workerMode       = false
 	workerExchange   = "amq.topic"
-	workerRoutingKey = "app.queue.incoming"
+	workerRoutingKey = "external.event.incoming"
 	workerQueue      = "app.queue"
 
 	metricsMode = true
 	metricsAddr = "0.0.0.0:9111"
 
-	redisURL = "redis://app.redis:6379/"
-	httpURL  = "http://external.http:8080/"
-	amqpURL  = "amqp://guest:guest@external.amqp:5672/"
+	redisURL = "redis://app.redis:6379"
+	httpURL  = "http://external.http:8080"
+	amqpURL  = "amqp://guest:guest@external.amqp:5672"
 
 	handleHistogram = prom.NewHistogramVec(prom.HistogramOpts{
 		Name: "handler_duration_seconds",
@@ -59,23 +59,23 @@ var (
 
 func init() {
 	flag.BoolVar(&serverMode, "s", serverMode, "Server Mode")
-	flag.StringVar(&serverHost, "-host", serverHost, "Server Host")
-	flag.IntVar(&serverPort, "-port", serverPort, "Server Port")
-	flag.IntVar(&serverRpsIncoming, "-rps-incoming", serverRpsIncoming, "Server Incoming RPS")
-	flag.IntVar(&serverRpsUnread, "-rps-unread", serverRpsUnread, "Server Unread RPS")
-	flag.IntVar(&serverRpsRead, "-rps-read", serverRpsRead, "Server Read RPS")
+	flag.StringVar(&serverHost, "host", serverHost, "Server Host")
+	flag.IntVar(&serverPort, "port", serverPort, "Server Port")
+	flag.IntVar(&serverRpsIncoming, "rps-incoming", serverRpsIncoming, "Server Incoming RPS")
+	flag.IntVar(&serverRpsUnread, "rps-unread", serverRpsUnread, "Server Unread RPS")
+	flag.IntVar(&serverRpsRead, "rps-read", serverRpsRead, "Server Read RPS")
 
 	flag.BoolVar(&workerMode, "w", workerMode, "Worker Mode")
-	flag.StringVar(&workerExchange, "-exchange", workerExchange, "Worker Exchange")
-	flag.StringVar(&workerRoutingKey, "-routing-key", workerRoutingKey, "Worker Routing Key")
-	flag.StringVar(&workerQueue, "-queue", workerQueue, "Worker Queue")
+	flag.StringVar(&workerExchange, "exchange", workerExchange, "Worker Exchange")
+	flag.StringVar(&workerRoutingKey, "routing-key", workerRoutingKey, "Worker Routing Key")
+	flag.StringVar(&workerQueue, "queue", workerQueue, "Worker Queue")
 
-	flag.StringVar(&redisURL, "-redis", redisURL, "Redis URL")
-	flag.StringVar(&httpURL, "-http", httpURL, "HTTP URL")
-	flag.StringVar(&amqpURL, "-amqp", amqpURL, "AMQP URL")
+	flag.StringVar(&redisURL, "redis", redisURL, "Redis URL")
+	flag.StringVar(&httpURL, "http", httpURL, "HTTP URL")
+	flag.StringVar(&amqpURL, "amqp", amqpURL, "AMQP URL")
 
 	flag.BoolVar(&metricsMode, "m", metricsMode, "Metrics Mode")
-	flag.StringVar(&metricsAddr, "-maddr", metricsAddr, "Metrics Addr")
+	flag.StringVar(&metricsAddr, "maddr", metricsAddr, "Metrics Addr")
 
 	prom.MustRegister(handleHistogram)
 }
@@ -100,7 +100,7 @@ func dial(f func() interface{}) interface{} {
 
 func connectToRedis(url string) redis.Conn {
 	return dial(func() interface{} {
-		c, err := redis.DialURL(redisURL)
+		c, err := redis.DialURL(url, redis.DialConnectTimeout(5*time.Second))
 		if checkErr(err) == nil {
 			return c
 		}
@@ -118,6 +118,16 @@ func connectToAMQP(url string) *amqp.Connection {
 	}).(*amqp.Connection)
 }
 
+func newRedisPool(url string) *redis.Pool {
+	return &redis.Pool{
+		MaxIdle:     50,
+		IdleTimeout: 100 * time.Second,
+		Dial: func() (redis.Conn, error) {
+			return connectToRedis(url), nil
+		},
+	}
+}
+
 func main() {
 	flag.Parse()
 
@@ -131,48 +141,52 @@ func main() {
 	}
 
 	if workerMode {
-		redisConn := connectToRedis(redisURL)
-		defer redisConn.Close()
+		redisPool := newRedisPool(redisURL)
+		defer redisPool.Close()
 
 		amqpConn := connectToAMQP(amqpURL)
 		defer amqpConn.Close()
 
 		runtime.wg.Add(1)
 
-		w := worker{runtime, redisConn, amqpConn}
+		w := worker{runtime, redisPool, amqpConn}
 		go func() {
 			checkErr(w.listen(workerExchange, workerRoutingKey, workerQueue))
 			runtime.wg.Done()
 		}()
+
+		log.Printf("%s: worker started", name)
 	}
 
 	if serverMode {
-		redisConn := connectToRedis(redisURL)
-		defer redisConn.Close()
+		redisPool := newRedisPool(redisURL)
+		defer redisPool.Close()
 
 		httpClient := &http.Client{}
 
 		runtime.wg.Add(1)
 
-		s := server{runtime, redisConn, httpClient, serverRpsIncoming, serverRpsUnread, serverRpsRead}
+		s := server{runtime, redisPool, httpClient, httpURL, serverRpsIncoming, serverRpsUnread, serverRpsRead}
 
 		go func() {
 			checkErr(s.listen(serverHost, serverPort))
 			runtime.wg.Done()
 		}()
+
+		log.Printf("%s: server started", name)
 	}
 
 	if metricsMode {
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
 		go checkErr(http.ListenAndServe(metricsAddr, mux))
+
+		log.Printf("%s: monitoring started", name)
 	}
 
 	log.Printf("%s: running...", name)
-
 	exit := make(chan os.Signal, 1)
 	signal.Notify(exit, syscall.SIGINT, syscall.SIGTERM)
-
 	select {
 	case <-exit:
 		close(runtime.done)
@@ -190,7 +204,7 @@ type runtime struct {
 type worker struct {
 	runtime *runtime
 
-	redisConn redis.Conn
+	redisPool *redis.Pool
 	amqpConn  *amqp.Connection
 }
 
@@ -237,7 +251,7 @@ func (w *worker) listen(exchange, routingKey, queue string) error {
 
 	go func() {
 		for d := range dd {
-			go w.handleDelivery(&d)
+			w.handleDelivery(&d)
 		}
 	}()
 
@@ -250,10 +264,13 @@ func (w *worker) handleDelivery(d *amqp.Delivery) {
 	t := time.Now()
 	defer handleHistogram.WithLabelValues("handleDelivery").Observe(time.Since(t).Seconds())
 
+	redisConn := w.redisPool.Get()
+	defer redisConn.Close()
+
 	id, err := strconv.ParseInt(string(d.Body), 10, 64)
 	if checkErr(err) == nil {
 		incomingKey := fmt.Sprintf("incoming:%d", id)
-		_, err = w.redisConn.Do("SET", incomingKey, 1)
+		_, err = redisConn.Do("SET", incomingKey, 1)
 		checkErr(err)
 	}
 	d.Ack(false)
@@ -262,8 +279,9 @@ func (w *worker) handleDelivery(d *amqp.Delivery) {
 type server struct {
 	runtime *runtime
 
-	redisConn  redis.Conn
+	redisPool  *redis.Pool
 	httpClient *http.Client
+	httpURL    string
 
 	rpsIncoming int
 	rpsUnread   int
@@ -325,15 +343,25 @@ func (s *server) handleIncoming(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	redisConn := s.redisPool.Get()
+	defer redisConn.Close()
+
 	incomingKey := fmt.Sprintf("incoming:%d", id)
-	incoming, _ := redis.Int(s.redisConn.Do("GET", incomingKey))
+	incoming, _ := redis.Int(redisConn.Do("GET", incomingKey))
 	fmt.Fprintf(w, "{\"%d\": %d}", id, incoming)
 }
 
 func (s *server) handleUnread(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
-	resp, err := s.httpClient.Get("/api/unread")
+	paramID := r.URL.Query().Get("id")
+	_, err := strconv.ParseInt(paramID, 10, 64)
+	if err := checkErr(err); err != nil {
+		w.WriteHeader(400)
+		return
+	}
+
+	resp, err := s.httpClient.Get(s.httpURL + "/api/unread")
 	if err := checkErr(err); err != nil {
 		w.WriteHeader(400)
 		return
@@ -346,11 +374,25 @@ func (s *server) handleUnread(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleRead(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
-	resp, err := s.httpClient.Post("/api/read", "application/json", nil)
+	paramID := r.URL.Query().Get("id")
+	id, err := strconv.ParseInt(paramID, 10, 64)
 	if err := checkErr(err); err != nil {
 		w.WriteHeader(400)
 		return
 	}
+
+	resp, err := s.httpClient.Post(s.httpURL+"/api/read", "application/json", nil)
+	if err := checkErr(err); err != nil {
+		w.WriteHeader(400)
+		return
+	}
+
+	redisConn := s.redisPool.Get()
+	defer redisConn.Close()
+
+	incomingKey := fmt.Sprintf("incoming:%d", id)
+	_, err = redisConn.Do("SET", incomingKey, 0)
+	checkErr(err)
 
 	defer resp.Body.Close()
 	io.Copy(w, resp.Body)
