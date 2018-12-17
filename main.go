@@ -23,6 +23,12 @@ import (
 )
 
 var (
+	version string
+	commit  string
+	date    string
+)
+
+var (
 	serverMode        = false
 	serverHost        = "app.server"
 	serverPort        = 9019
@@ -84,7 +90,7 @@ func dial(f func() interface{}) interface{} {
 	b := backoff.Backoff{}
 	for {
 		res := f()
-		if res == nil {
+		if res != nil {
 			return res
 		}
 		time.Sleep(b.Duration())
@@ -114,6 +120,7 @@ func connectToAMQP(url string) *amqp.Connection {
 func main() {
 	flag.Parse()
 
+	log.Printf("main: version=%s, commit=%s, date=%s", version, commit, date)
 	log.Printf("main: starting...")
 
 	runtime := &runtime{
@@ -159,10 +166,11 @@ func main() {
 		go checkErr(http.ListenAndServe(metricsAddr, mux))
 	}
 
+	log.Printf("main: running...")
+
 	exit := make(chan os.Signal, 1)
 	signal.Notify(exit, syscall.SIGINT, syscall.SIGTERM)
 
-	log.Printf("main: running...")
 	select {
 	case <-exit:
 		close(runtime.done)

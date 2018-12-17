@@ -17,7 +17,8 @@ DATE=$(shell date +'%FT%TZ%z')
 .PHONY: build clean up
 
 ${GO_OUTPUT_FILE}: vendor
-	go build -o ${GO_OUTPUT_FILE} -a .
+	go build -o ${GO_OUTPUT_FILE} -a \
+	-ldflags '-s -w -extldflags "-static" -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)'
 
 vendor:
 	$(GO) get -u github.com/golang/dep/cmd/dep
@@ -30,8 +31,3 @@ clean:
 
 up:
 	GO_PACKAGE=${GO_PACKAGE} $(COMPOSE) -p ${GO_OUTPUT_FILE} -f ${COMPOSE_FILE} up --build
-
-info:
-	echo ${COMMIT}
-	echo ${VERSION}
-	echo ${DATE}
