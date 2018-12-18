@@ -6,9 +6,15 @@ services:
       args:
           - GO_PACKAGE
           - GO_APP_FILE=${GO_APP_CONSUMER}
+    command: -c -m -time-read=500ms
+    ports:
+      - 9903:9901
   test.producer:
     build:
       context: ..
       args:
           - GO_PACKAGE
           - GO_APP_FILE=${GO_APP_PRODUCER}
+    command: -p -m
+    ports:
+      - 9904:9901

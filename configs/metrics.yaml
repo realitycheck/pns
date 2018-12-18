@@ -6,11 +6,13 @@ services:
     volumes:
       - ./metrics/prometheus.yaml:/conf/prometheus.yaml:ro
       - ../data/prometheus:/etc/prometheus
-    network_mode: host
     command: --config.file=/conf/prometheus.yaml
+    ports:
+      - 9090:9090
   metrics.grafana:
     user: ${DATA_USER:-1000}
     image: grafana/grafana
     volumes:
       - ../data/grafana:/var/lib/grafana
-    network_mode: host
+    ports:
+      - 3000:3000

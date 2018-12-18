@@ -4,16 +4,22 @@ global:
 scrape_configs:
   - job_name: external.http
     static_configs:
-      - targets: ['localhost:9113']
+      - targets: ['metrics.external.http:9113']
   - job_name: external.amqp
     static_configs:
-      - targets: ['localhost:9419']
+      - targets: ['metrics.external.amqp:9419']
   - job_name: app.redis
     static_configs:
-      - targets: ['localhost:9121']
+      - targets: ['metrics.app.redis:9121']
   - job_name: app.server
     static_configs:
-      - targets: ['localhost:9111']
+      - targets: ['app.server:9901']
   - job_name: app.worker
     static_configs:
-      - targets: ['localhost:9112']
+      - targets: ['app.worker:9901']
+  - job_name: test.consumer
+    static_configs:
+      - targets: ['test.consumer:9901']
+  - job_name: test.producer
+    static_configs:
+      - targets: ['test.producer:9901']

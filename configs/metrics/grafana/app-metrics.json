@@ -7,7 +7,9 @@
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
+        "limit": 100,
         "name": "Annotations & Alerts",
+        "showIn": 0,
         "type": "dashboard"
       }
     ]
@@ -15,7 +17,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 3,
+  "id": 2,
   "links": [],
   "panels": [
     {
@@ -38,7 +40,7 @@
       "dashes": false,
       "fill": 1,
       "gridPos": {
-        "h": 9,
+        "h": 6,
         "w": 12,
         "x": 0,
         "y": 1
@@ -47,13 +49,15 @@
       "interval": "",
       "legend": {
         "alignAsTable": true,
-        "avg": false,
+        "avg": true,
         "current": true,
         "max": false,
         "min": false,
         "rightSide": true,
         "show": true,
         "sideWidth": null,
+        "sort": null,
+        "sortDesc": null,
         "total": false,
         "values": true
       },
@@ -76,13 +80,34 @@
           "intervalFactor": 1,
           "legendFormat": "{{handler}} ({{job}})",
           "refId": "A"
+        },
+        {
+          "expr": "rate(app_incoming_num_total[1m])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "produceIncoming ({{job}})",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(app_polling_num_total[1m])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "consumePolling ({{job}})",
+          "refId": "C"
+        },
+        {
+          "expr": "rate(app_reading_num_total[1m])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "consumeReading ({{job}})",
+          "refId": "D"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Rates",
+      "title": "Rate",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -102,7 +127,7 @@
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": null,
+          "min": "0",
           "show": true
         },
         {
@@ -126,7 +151,7 @@
       "dashes": false,
       "fill": 1,
       "gridPos": {
-        "h": 9,
+        "h": 6,
         "w": 12,
         "x": 12,
         "y": 1
@@ -134,12 +159,14 @@
       "id": 6,
       "legend": {
         "alignAsTable": true,
-        "avg": false,
+        "avg": true,
         "current": true,
         "max": false,
         "min": false,
         "rightSide": true,
         "show": true,
+        "sort": null,
+        "sortDesc": null,
         "total": false,
         "values": true
       },
@@ -168,7 +195,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Durations",
+      "title": "Duration",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -188,7 +215,7 @@
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": null,
+          "min": "0",
           "show": true
         },
         {
@@ -211,7 +238,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 10
+        "y": 7
       },
       "id": 16,
       "panels": [],
@@ -225,10 +252,10 @@
       "dashes": false,
       "fill": 1,
       "gridPos": {
-        "h": 9,
-        "w": 12,
+        "h": 5,
+        "w": 6,
         "x": 0,
-        "y": 11
+        "y": 8
       },
       "id": 8,
       "legend": {
@@ -291,7 +318,7 @@
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": null,
+          "min": "0",
           "show": true
         },
         {
@@ -315,10 +342,10 @@
       "dashes": false,
       "fill": 1,
       "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 11
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 8
       },
       "id": 10,
       "legend": {
@@ -381,7 +408,7 @@
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": null,
+          "min": "0",
           "show": true
         },
         {
@@ -405,12 +432,13 @@
       "dashes": false,
       "fill": 1,
       "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 20
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 8
       },
       "id": 11,
+      "interval": "",
       "legend": {
         "alignAsTable": true,
         "avg": true,
@@ -471,7 +499,7 @@
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": null,
+          "min": "0",
           "show": true
         },
         {
@@ -495,10 +523,10 @@
       "dashes": false,
       "fill": 1,
       "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 20
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 8
       },
       "id": 12,
       "legend": {
@@ -532,6 +560,7 @@
         {
           "expr": "app_duration_seconds{handler=\"handleRead\"}",
           "format": "time_series",
+          "instant": false,
           "intervalFactor": 1,
           "legendFormat": "{{quantile}}",
           "refId": "A"
@@ -561,7 +590,7 @@
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": null,
+          "min": "0",
           "show": true
         },
         {
@@ -584,7 +613,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 29
+        "y": 13
       },
       "id": 14,
       "panels": [],
@@ -598,17 +627,17 @@
       "dashes": false,
       "fill": 1,
       "gridPos": {
-        "h": 9,
+        "h": 6,
         "w": 12,
         "x": 0,
-        "y": 30
+        "y": 14
       },
       "id": 2,
       "interval": "",
       "legend": {
         "alignAsTable": true,
-        "avg": false,
-        "current": true,
+        "avg": true,
+        "current": false,
         "max": false,
         "min": false,
         "rightSide": true,
@@ -660,8 +689,8 @@
           "format": "percentunit",
           "label": null,
           "logBase": 1,
-          "max": null,
-          "min": null,
+          "max": "1",
+          "min": "0",
           "show": true
         },
         {
@@ -685,17 +714,17 @@
       "dashes": false,
       "fill": 1,
       "gridPos": {
-        "h": 9,
+        "h": 6,
         "w": 12,
         "x": 12,
-        "y": 30
+        "y": 14
       },
       "id": 19,
       "interval": "",
       "legend": {
         "alignAsTable": true,
-        "avg": false,
-        "current": true,
+        "avg": true,
+        "current": false,
         "max": false,
         "min": false,
         "rightSide": true,
@@ -766,7 +795,7 @@
       }
     }
   ],
-  "refresh": "30s",
+  "refresh": "10s",
   "schemaVersion": 16,
   "style": "dark",
   "tags": [
@@ -776,7 +805,7 @@
     "list": []
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-1m",
     "to": "now"
   },
   "timepicker": {
@@ -807,5 +836,5 @@
   "timezone": "",
   "title": "App Server",
   "uid": "Nma7Xzyiz",
-  "version": 7
+  "version": 12
 }

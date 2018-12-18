@@ -1,4 +1,4 @@
-# PMS Makefile
+# PNS Makefile
 GO ?= go
 DEP ?= dep
 DOCKER ?= docker

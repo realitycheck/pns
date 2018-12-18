@@ -36,6 +36,8 @@ var (
 	serverRpsIncoming = 0
 	serverRpsUnread   = 0
 	serverRpsRead     = 0
+	serverTimeUnread  time.Duration
+	serverTimeRead    time.Duration
 
 	workerMode       = false
 	workerExchange   = "amq.topic"
@@ -43,7 +45,7 @@ var (
 	workerQueue      = "app.queue"
 
 	metricsMode = true
-	metricsAddr = "0.0.0.0:9111"
+	metricsAddr = "0.0.0.0:9901"
 
 	redisURL = "redis://app.redis:6379"
 	httpURL  = "http://external.http:8080"
@@ -64,6 +66,8 @@ func init() {
 	flag.IntVar(&serverRpsIncoming, "rps-incoming", serverRpsIncoming, "Server Incoming RPS")
 	flag.IntVar(&serverRpsUnread, "rps-unread", serverRpsUnread, "Server Unread RPS")
 	flag.IntVar(&serverRpsRead, "rps-read", serverRpsRead, "Server Read RPS")
+	flag.DurationVar(&serverTimeUnread, "time-unread", serverTimeUnread, "Server Unread Busy Time")
+	flag.DurationVar(&serverTimeRead, "time-read", serverTimeRead, "Server Read Busy Time")
 
 	flag.BoolVar(&workerMode, "w", workerMode, "Worker Mode")
 	flag.StringVar(&workerExchange, "exchange", workerExchange, "Worker Exchange")
@@ -147,9 +151,13 @@ func main() {
 		amqpConn := connectToAMQP(amqpURL)
 		defer amqpConn.Close()
 
-		runtime.wg.Add(1)
+		w := worker{
+			runtime:   runtime,
+			redisPool: redisPool,
+			amqpConn:  amqpConn,
+		}
 
-		w := worker{runtime, redisPool, amqpConn}
+		runtime.wg.Add(1)
 		go func() {
 			checkErr(w.listen(workerExchange, workerRoutingKey, workerQueue))
 			runtime.wg.Done()
@@ -164,10 +172,19 @@ func main() {
 
 		httpClient := &http.Client{}
 
+		s := server{
+			runtime:     runtime,
+			redisPool:   redisPool,
+			httpClient:  httpClient,
+			httpURL:     httpURL,
+			rpsIncoming: serverRpsIncoming,
+			rpsUnread:   serverRpsUnread,
+			rpsRead:     serverRpsRead,
+			timeUnread:  serverTimeUnread,
+			timeRead:    serverTimeRead,
+		}
+
 		runtime.wg.Add(1)
-
-		s := server{runtime, redisPool, httpClient, httpURL, serverRpsIncoming, serverRpsUnread, serverRpsRead}
-
 		go func() {
 			checkErr(s.listen(serverHost, serverPort))
 			runtime.wg.Done()
@@ -286,6 +303,9 @@ type server struct {
 	rpsIncoming int
 	rpsUnread   int
 	rpsRead     int
+
+	timeUnread time.Duration
+	timeRead   time.Duration
 }
 
 func rpsRestricted(rps int) func(http.HandlerFunc) http.HandlerFunc {
@@ -301,11 +321,13 @@ func rpsRestricted(rps int) func(http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func promHistogram(handler string) func(http.HandlerFunc) http.HandlerFunc {
+func promSummary(handler string) func(http.HandlerFunc) http.HandlerFunc {
 	return func(h http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			t := time.Now()
-			defer metricsDurationSummary.WithLabelValues(handler).Observe(time.Since(t).Seconds())
+			defer func(t time.Time) {
+				metricsDurationSummary.WithLabelValues(handler).Observe(time.Since(t).Seconds())
+			}(t)
 			h(w, r)
 		}
 	}
@@ -313,9 +335,9 @@ func promHistogram(handler string) func(http.HandlerFunc) http.HandlerFunc {
 
 func (s *server) listen(host string, port int) error {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/incoming", rpsRestricted(s.rpsIncoming)(promHistogram("handleIncoming")(s.handleIncoming)))
-	mux.HandleFunc("/unread", rpsRestricted(s.rpsUnread)(promHistogram("handleUnread")(s.handleUnread)))
-	mux.HandleFunc("/read", rpsRestricted(s.rpsRead)(promHistogram("handleRead")(s.handleRead)))
+	mux.HandleFunc("/incoming", rpsRestricted(s.rpsIncoming)(promSummary("handleIncoming")(s.handleIncoming)))
+	mux.HandleFunc("/unread", rpsRestricted(s.rpsUnread)(promSummary("handleUnread")(s.handleUnread)))
+	mux.HandleFunc("/read", rpsRestricted(s.rpsRead)(promSummary("handleRead")(s.handleRead)))
 
 	addr := fmt.Sprintf("%s:%d", host, port)
 
@@ -369,6 +391,15 @@ func (s *server) handleUnread(w http.ResponseWriter, r *http.Request) {
 
 	defer resp.Body.Close()
 	io.Copy(w, resp.Body)
+
+	if s.timeUnread > 0 {
+		time.Sleep((&backoff.Backoff{
+			Min:    s.timeUnread,
+			Max:    s.timeUnread,
+			Factor: 1,
+			Jitter: true,
+		}).Duration())
+	}
 }
 
 func (s *server) handleRead(w http.ResponseWriter, r *http.Request) {
@@ -387,13 +418,22 @@ func (s *server) handleRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	defer resp.Body.Close()
+	io.Copy(w, resp.Body)
+
+	if s.timeRead > 0 {
+		time.Sleep((&backoff.Backoff{
+			Min:    s.timeRead,
+			Max:    s.timeRead,
+			Factor: 1,
+			Jitter: true,
+		}).Duration())
+	}
+
 	redisConn := s.redisPool.Get()
 	defer redisConn.Close()
 
 	incomingKey := fmt.Sprintf("incoming:%d", id)
 	_, err = redisConn.Do("DEL", incomingKey)
 	checkErr(err)
-
-	defer resp.Body.Close()
-	io.Copy(w, resp.Body)
 }

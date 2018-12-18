@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"github.com/jpillora/backoff"
+	prom "github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/streadway/amqp"
 )
 
@@ -27,9 +30,17 @@ var (
 	producerExchange   = "amq.topic"
 	producerRoutingKey = "external.event.incoming"
 	producerRpsPublish = 100
-	producerMaxID      = 1000000
+	producerMaxID      = 100000
+
+	metricsMode = true
+	metricsAddr = "0.0.0.0:9901"
 
 	amqpURL = "amqp://guest:guest@external.amqp:5672"
+
+	metricsIncomingCounter = prom.NewCounter(prom.CounterOpts{
+		Name: "app_incoming_num_total",
+		Help: "The total number of incoming messages",
+	})
 )
 
 func init() {
@@ -39,7 +50,12 @@ func init() {
 	flag.IntVar(&producerRpsPublish, "rps", producerRpsPublish, "Producer Publish RPS")
 	flag.IntVar(&producerMaxID, "max", producerMaxID, "Producer Max ID")
 
+	flag.BoolVar(&metricsMode, "m", metricsMode, "Metrics Mode")
+	flag.StringVar(&metricsAddr, "maddr", metricsAddr, "Metrics Addr")
+
 	flag.StringVar(&amqpURL, "amqp", amqpURL, "AMQP URL")
+
+	prom.MustRegister(metricsIncomingCounter)
 }
 
 func checkErr(err error) error {
@@ -82,16 +98,33 @@ func main() {
 		done: make(chan struct{}),
 	}
 
-	amqpConn := connectToAMQP(amqpURL)
-	defer amqpConn.Close()
+	if producerMode {
+		amqpConn := connectToAMQP(amqpURL)
+		defer amqpConn.Close()
 
-	p := &producer{runtime, amqpConn, make(chan int), producerMaxID, producerRpsPublish}
-	runtime.wg.Add(1)
+		p := &producer{
+			runtime:    runtime,
+			amqpConn:   amqpConn,
+			maxID:      producerMaxID,
+			rpsPublish: producerRpsPublish,
+		}
 
-	go func() {
-		checkErr(p.publish(producerExchange, producerRoutingKey))
-		runtime.wg.Done()
-	}()
+		runtime.wg.Add(1)
+		go func() {
+			checkErr(p.publish(producerExchange, producerRoutingKey))
+			runtime.wg.Done()
+		}()
+
+		log.Printf("%s: producer started", name)
+	}
+
+	if metricsMode {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		go checkErr(http.ListenAndServe(metricsAddr, mux))
+
+		log.Printf("%s: monitoring started", name)
+	}
 
 	log.Printf("%s: running...", name)
 	exit := make(chan os.Signal, 1)
@@ -114,7 +147,6 @@ type producer struct {
 	runtime  *runtime
 	amqpConn *amqp.Connection
 
-	users chan int
 	maxID int
 
 	rpsPublish int
@@ -126,6 +158,8 @@ func (p *producer) publish(exchange, routingKey string) error {
 		return err
 	}
 
+	usersQueue := make(chan int)
+
 	go func() {
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
 		rate := time.Tick(time.Second / time.Duration(p.rpsPublish))
@@ -133,17 +167,19 @@ func (p *producer) publish(exchange, routingKey string) error {
 		for {
 			select {
 			case <-p.runtime.done:
-				close(p.users)
+				close(usersQueue)
 				return
-			default:
-				<-rate
+			case <-rate:
+				usersQueue <- int(r.Int31()) % p.maxID
 			}
-			p.users <- int(r.Int31()) % p.maxID
+
 		}
 	}()
 
-	for userID := range p.users {
+	for userID := range usersQueue {
 		go func(userID string) {
+			defer metricsIncomingCounter.Inc()
+
 			err := ch.Publish(
 				exchange,
 				routingKey,

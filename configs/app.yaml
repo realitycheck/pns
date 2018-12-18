@@ -24,10 +24,10 @@ services:
       args:
           - GO_PACKAGE
           - GO_APP_FILE
-    command: -s
+    command: -s -m -time-read=100ms -time-unread=50ms -rps-read=20 -rps-unread=50
     ports:
       - 9019:9019
-      - 9111:9111
+      - 9901:9901
     links:
       - app.redis
       - external.http
@@ -37,9 +37,9 @@ services:
       args:
           - GO_PACKAGE
           - GO_APP_FILE
-    command: -w
+    command: -w -m
     ports:
-      - 9112:9111
+      - 9902:9901
     links:
       - app.redis
       - external.amqp
